@@ -1,0 +1,21 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const src=fs.readFileSync(__dirname+'/../js/app.js','utf8');
+const ctx={};vm.createContext(ctx);vm.runInContext(src.slice(src.indexOf('var X=['),src.indexOf('(function(){\nvar ti=-1')),ctx);
+const {X,T}=ctx,O=require('../js/optimizer.js');let n=0;const t=(m,f)=>{f();n++;console.log('ok -',m)};
+const tg=e=>T.find(x=>x.e===e),dmg=(tt,c)=>Object.keys(c).reduce((a,k)=>a+c[k]*tt.d[k],0);
+t('mix never costs more than best single explosive (all targets)',()=>T.forEach(x=>{const m=O.solve(x,X),s=O.single(x,X);assert(m.sulfur<=s.sulfur,x.e)}));
+t('every mix really destroys the target (float re-check)',()=>T.forEach(x=>{const m=O.solve(x,X);assert(dmg(x,m.counts)>=x.h-1e-9,x.e)}));
+t('reported sulfur equals sum of counts*unit sulfur',()=>T.forEach(x=>{const m=O.solve(x,X);assert.strictEqual(m.sulfur,Object.keys(m.counts).reduce((a,k)=>a+m.counts[k]*X.find(y=>y.k===k).s,0))}));
+t('unsupported combos never used (armored door has no hv/in; stone wall no incendiary)',()=>T.forEach(x=>{const m=O.solve(x,X);Object.keys(m.counts).forEach(k=>assert(x.d[k]>0,x.e+':'+k))}));
+t('non-craftable MLRS rocket never chosen',()=>T.forEach(x=>assert(!('ml' in O.solve(x,X).counts))));
+t('excluding explosives is honoured',()=>{const m=O.solve(tg('Stone Wall'),X,{ex:false,hv:false});assert(!('ex' in m.counts)&&!('hv' in m.counts))});
+t('brute-force cross-check: wooden door vs exhaustive search of small combos',()=>{const x=tg('Wooden Door');let best=1e9;const ks=['c4','rk','sa','in','hv'].filter(k=>x.d[k]);
+ for(let a=0;a<=2;a++)for(let b=0;b<=3;b++)for(let c=0;c<=3;c++)for(let d=0;d<=2;d++){const cs={c4:a,rk:b,sa:c,in:d};if(dmg(x,cs)>=x.h-1e-9){const s=Object.keys(cs).reduce((q,k)=>q+cs[k]*X.find(y=>y.k===k).s,0);best=Math.min(best,s)}}
+ assert(O.solve(x,X,{ex:false}).sulfur<=best)});
+t('no double counting: totals are linear in counts, scale with quantity',()=>{const c={c4:1,sa:2},a=O.totals(c,X,1),b=O.totals(c,X,3);assert.strictEqual(b.sulfur,3*a.sulfur);assert.strictEqual(a.sulfur,2200+2*480);assert.strictEqual(a.gunpowder,1000+480);assert.strictEqual(a.explosives,20)});
+t('no allowed explosive supports target -> null',()=>assert.strictEqual(O.solve(tg('SAM Site'),X,{c4:false,rk:false,sa:false,in:false,hv:false,ex:false}),null));
+t('regression: damage below 1/1000 no longer hangs (was an infinite loop)',()=>{const r=O.solve({h:1,d:{a:0.0004}},[{k:'a',s:100,g:0,xe:0}]);assert.strictEqual(r.counts.a,2500)});
+t('exactness: 4-decimal damage is solved exactly (3 pieces of 0.3335 cover 1, old floor-to-1/1000 DP needed 4)',()=>{const r=O.solve({h:1,d:{a:0.3335}},[{k:'a',s:100,g:0,xe:0}]);assert.strictEqual(r.counts.a,3);assert.strictEqual(r.exact,true)});
+t('real data is solved exactly for every target',()=>T.forEach(x=>assert.strictEqual(O.solve(x,X).exact,true,x.e)));
+t('unrepresentable precision falls back conservatively (never optimistic) and says so',()=>{const r=O.solve({h:1,d:{a:1e-7,b:0.6}},[{k:'a',s:100,g:0,xe:0},{k:'b',s:30,g:0,xe:0}]);assert.strictEqual(r.exact,false);assert(r.damage>=1)});
+console.log(n+' optimizer tests passed');
